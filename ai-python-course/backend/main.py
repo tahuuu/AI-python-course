@@ -39,6 +39,9 @@ class Solution(BaseModel):
     code: str
     exercise: dict
 
+class ProjectInterest(BaseModel):
+    interest: str
+
 @app.post("/api/execute")
 async def execute_code(code: Code):
     old_stdout = sys.stdout
@@ -162,6 +165,54 @@ Example of a correct JSON response:
         return feedback_json
     except Exception as e:
         return {"is_correct": False, "feedback": f"Sorry, I couldn't check your solution at the moment. Error: {e}"}
+
+
+@app.post("/api/generate-project")
+async def generate_project(project_interest: ProjectInterest):
+    if not model or not api_key:
+        return {"error": "AI model not configured. Please check GOOGLE_API_KEY."}
+
+    try:
+        prompt = f"""You are a creative mentor for a new Python programmer.
+A student has expressed an interest in the topic of: "{project_interest.interest}"
+
+Your task is to generate a simple, beginner-friendly project idea related to this topic. The project should be something a beginner can build in a single Python script.
+
+**Your Instructions:**
+1.  Create a catchy and descriptive `title` for the project.
+2.  Write a one-paragraph `description` of what the project is.
+3.  List 3-5 key `features` for the project as an array of strings. These should be actionable steps the student can take.
+4.  Return your response as a single JSON object with the keys "title", "description", and "features".
+
+**Example JSON Response for the interest "space":**
+{{
+  "title": "Solar System Fact Explorer",
+  "description": "Build a simple interactive program that lets users ask for facts about planets in our solar system. The program will have a small database of facts and will respond to user input.",
+  "features": [
+    "Create a dictionary to store facts about each planet (e.g., diameter, distance from sun).",
+    "Prompt the user to enter a planet's name.",
+    "Retrieve and display the facts for the requested planet.",
+    "Include a loop so the user can ask about multiple planets.",
+    "Add error handling for when a user enters a non-existent planet."
+  ]
+}}
+"""
+        response = model.generate_content(prompt)
+        
+        # Clean the response to extract the JSON part
+        cleaned_text = response.text.strip()
+        json_start = cleaned_text.find('{')
+        json_end = cleaned_text.rfind('}') + 1
+        
+        if json_start == -1 or json_end == 0:
+            raise ValueError("No JSON object found in the AI response.")
+            
+        json_string = cleaned_text[json_start:json_end]
+        
+        project_json = json.loads(json_string)
+        return project_json
+    except Exception as e:
+        return {"title": "AI Generation Error", "description": f"Could not generate project idea: {e}", "features": []}
 
 
 @app.get("/")
