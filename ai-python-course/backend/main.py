@@ -42,6 +42,9 @@ class Solution(BaseModel):
 class ProjectInterest(BaseModel):
     interest: str
 
+class ExerciseRequest(BaseModel):
+    difficulty: str
+
 @app.post("/api/execute")
 async def execute_code(code: Code):
     old_stdout = sys.stdout
@@ -79,22 +82,23 @@ Explain the error in a simple, beginner-friendly way. Do not just give the answe
 
     return {"output": output, "ai_feedback": ai_feedback}
 
-@app.get("/api/generate-exercise")
-async def generate_exercise():
+@app.post("/api/generate-exercise")
+async def generate_exercise(request: ExerciseRequest):
     if not model or not api_key:
         return {"error": "AI model not configured. Please check GOOGLE_API_KEY."}
     
     try:
-        prompt = '''You are a Python instructor. Generate a beginner-level Python exercise.
+        prompt = f'''You are a Python instructor. Generate a {request.difficulty}-level Python exercise.
+For Intermediate or Advanced, this may involve concepts like object-oriented programming, data structures, algorithms, or file I/O.
 The exercise should be simple and focus on a fundamental concept (e.g., variables, loops, functions, lists).
 Provide the output as a JSON object with two keys: "title" and "description".
 The description should clearly explain the task and provide a simple example.
 
 Example format:
-{
+{{
   "title": "Sum of a List",
   "description": "Write a Python function called `sum_list` that takes a list of numbers as input and returns their sum. For example, `sum_list([1, 2, 3])` should return `6`."
-}
+}}
 '''
         response = model.generate_content(prompt)
         
@@ -213,6 +217,33 @@ Your task is to generate a simple, beginner-friendly project idea related to thi
         return project_json
     except Exception as e:
         return {"title": "AI Generation Error", "description": f"Could not generate project idea: {e}", "features": []}
+
+
+@app.post("/api/explain-code")
+async def explain_code(code: Code):
+    if not model or not api_key:
+        return {"error": "AI model not configured. Please check GOOGLE_API_KEY."}
+
+    try:
+        prompt = f"""You are an expert Python programmer and a patient teacher.
+A student has asked for an explanation of the following code.
+
+**The Student's Code:**
+```python
+{code.code}
+```
+
+**Your Instructions:**
+1.  Analyze the code step by step.
+2.  Provide a clear, concise, and easy-to-understand explanation.
+3.  If the code is simple, explain the basic concepts.
+4.  If the code is more complex, break it down into logical parts and explain each one.
+5.  Use markdown for formatting, such as bullet points or numbered lists, to make the explanation easy to read.
+"""
+        response = model.generate_content(prompt)
+        return {"explanation": response.text}
+    except Exception as e:
+        return {"explanation": f"Sorry, I couldn't provide an explanation at this time. Error: {e}"}
 
 
 @app.get("/")
