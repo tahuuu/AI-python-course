@@ -53,6 +53,10 @@ body {
 }
 
 /* Override default button styles */
+.btn-primary, .btn-secondary {
+  transition: all 0.2s ease-in-out;
+}
+
 .btn-primary {
   background-color: var(--primary-color) !important;
   border-color: var(--primary-color) !important;
@@ -66,6 +70,10 @@ body {
   font-weight: bold;
 }
 
+.btn-primary:hover, .btn-secondary:hover {
+  transform: scale(1.03);
+  filter: brightness(1.2);
+}
 /* Output Panel Tabs */
 .nav-tabs {
   border-bottom-color: var(--border-color) !important;
@@ -115,4 +123,17 @@ body {
   padding: 10px;
   border-radius: 4px;
   color: var(--light-text);
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(40, 44, 52, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
 }

@@ -8,6 +8,9 @@ from fastapi.middleware.cors import CORSMiddleware
 import google.generativeai as genai
 from dotenv import load_dotenv
 
+import asyncio
+from fastapi.responses import StreamingResponse
+
 load_dotenv()
 
 app = FastAPI()
@@ -27,7 +30,7 @@ try:
     if not api_key:
         print("Warning: GOOGLE_API_KEY environment variable not set.")
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-pro-latest')
+    model = genai.GenerativeModel('gemini-flash-latest')
 except Exception as e:
     print(f"Error configuring generative AI model: {e}")
     model = None
@@ -47,40 +50,34 @@ class ExerciseRequest(BaseModel):
 
 @app.post("/api/execute")
 async def execute_code(code: Code):
-    old_stdout = sys.stdout
-    redirected_output = sys.stdout = io.StringIO()
-    ai_feedback = ""
+    
+    async def stream_generator():
+        # The -u flag is important for unbuffered output
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, '-u', '-c', code.code,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
 
-    try:
-        exec(code.code)
-        output = redirected_output.getvalue()
-    except Exception as e:
-        error_message = str(e)
-        output = error_message
-        if model and api_key:
-            try:
-                prompt = f"""You are an expert Python tutor. A student has written the following code which produced an error.
+        # Await both streams concurrently
+        async def read_stream(stream, stream_name):
+            while True:
+                line = await stream.readline()
+                if not line:
+                    break
+                yield f"{line.decode('utf-8')}"
 
-Code:
-```python
-{code.code}
-```
+        try:
+            # Merge stdout and stderr for simplicity
+            async for line in read_stream(process.stdout, 'stdout'):
+                yield line
+            async for line in read_stream(process.stderr, 'stderr'):
+                yield line
+        finally:
+            # Ensure the process is cleaned up
+            await process.wait()
 
-Error:
-```
-{error_message}
-```
-
-Explain the error in a simple, beginner-friendly way. Do not just give the answer, but guide the student to understand the mistake and how to fix it. Keep your explanation concise (2-3 sentences)."""
-                
-                response = model.generate_content(prompt)
-                ai_feedback = response.text
-            except Exception as gen_ai_e:
-                ai_feedback = f"Could not get AI feedback: {gen_ai_e}"
-    finally:
-        sys.stdout = old_stdout
-
-    return {"output": output, "ai_feedback": ai_feedback}
+    return StreamingResponse(stream_generator(), media_type="text/plain")
 
 @app.post("/api/generate-exercise")
 async def generate_exercise(request: ExerciseRequest):
@@ -116,8 +113,7 @@ Example format:
         return exercise_json
     except Exception as e:
         # Fallback in case of parsing error
-        return {"title": "AI Generation Error", "description": f"Could not generate or parse exercise: {e}"
-} 
+        return {"title": "AI Generation Error", "description": f"Could not generate or parse exercise: {e}"} 
 
 
 @app.post("/api/check-solution")
